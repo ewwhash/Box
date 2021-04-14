@@ -1,8 +1,9 @@
-local shell         = require("shell")
-local component     = require("component")
-local computer      = require("computer")
-local unicode       = require("unicode")
+local shell = require("shell")
+local component = require("component")
+local computer = require("computer")
+local unicode = require("unicode")
 local serialization = require("serialization")
+local thread = require("thread")
 
 --Methods list---------------------------------------------------------------------------------------------------------
 
@@ -221,7 +222,7 @@ local function spcall(...)
 --Sandbox creation-----------------------------------------------------------------------------------------------------
 
 local function createSandbox()
-    local sandbox, libcomponent, libcomputer, env, started
+    local sandbox, libcomponent, libcomputer, env
     local components, cache, signalQueue = {}, {}, {}
 
     libcomponent = {
@@ -312,11 +313,6 @@ local function createSandbox()
     libcomputer = {
         pullSignal = function(timeout)
             local signal = coroutine.yield(timeout or math.huge)
-
-            if sandbox.paused then
-                coroutine.yield(true)
-            end
-
             table.remove(sandbox.signalQueue, 1)
             return table.unpack(signal or {})
         end,
@@ -462,11 +458,11 @@ local function createSandbox()
             local chunk, err = load(code, "=container", "t", env)
 
             if chunk then
-                sandbox.coroutine = coroutine.create(
-                    function()
-                        coroutine.yield(xpcall(chunk, debug.traceback))
-                    end
-                )
+                sandbox.coroutine = coroutine.create(chunk)
+                --     function()
+                --         coroutine.yield(xpcall(chunk, debug.traceback))
+                --     end
+                -- )
                 return true
             end
             return chunk, err
@@ -482,11 +478,11 @@ local function createSandbox()
     return sandbox
 end
 
-local sandbox = createSandbox()
-sandbox.component.pass(component.gpu.address)
-sandbox.component.pass(component.screen.address)
+_G. sandbox = createSandbox()
+sandbox.component.pass(component.get('eec')) -- gpu
+sandbox.component.pass(component.get('6e1')) -- screen
+sandbox.component.pass(component.get('33c')) -- keyboard
 sandbox.component.pass(component.internet.address)
-sandbox.component.pass(component.keyboard.address)
 sandbox.component.pass(component.computer.address)
 sandbox.component.pass(component.eeprom.address)
 
@@ -496,25 +492,76 @@ file:close()
 
 sandbox.bootstrap(data)
 
-while true do    
-    local data = {coroutine.resume(sandbox.coroutine, sandbox.signalQueue[1])}
+-- local event, hypervisor = require("event")
 
-    if data[2] then
-        if type(data[2]) == "number" then
-            local deadline = computer.uptime() + (data[2])
+-- local function ignoreEvents()
+--     event.ignore("key_down", hypervisor)
+--     event.ignore("key_up", hypervisor)
+--     event.ignore("clipboard", hypervisor)
+-- end
 
-            repeat
-                local signal = {computer.pullSignal(deadline)}
+-- local function resume()
+--     if not sandbox.paused then
+--         local data = {coroutine.resume(sandbox.coroutine, sandbox.signalQueue[1])}
 
-                if signal[1] == "key_down" or signal[1] == "key_up" or signal[1] == "clipboard" and sandbox.component.list[signal[2]] then
-                    table.insert(sandbox.signalQueue, 1, signal)
-                    break
-                end
-            until computer.uptime() >= deadline
-        else
+--         if data[2] then
+--             if type(data[2]) == "number" then
+--                 event.timer(data[2], resume)
+--             else
+--                 ignoreEvents()
+--                 sandbox = nil
+--             end
+--         else
+--             debug_print(data[3])
+--             ignoreEvents()
+--             sandbox = nil
+--         end
+--     end
+-- end
+
+-- function hypervisor(...)
+--     local signal = {...}
+--     if sandbox.component.list[signal[2]] then
+--         table.insert(sandbox.signalQueue, 1, signal)
+--         event.cancel(resumeTimer)
+--         resume()
+--     end
+-- end
+
+-- event.listen("key_down", hypervisor)
+-- event.listen("key_up", hypervisor)
+-- event.listen("clipboard", hypervisor)
+-- resume()b
+
+local i = 0
+local function supervisor() 
+    while true do    
+        local data = {coroutine.resume(sandbox.coroutine, sandbox.signalQueue[1])}
+        i = i + 1
+        print(i)
+        computer.beep(2000, 3)
+        
+        if sandbox.paused then
             break
+        elseif data[1] then
+            if type(data[2]) == "number" then
+                local deadline = computer.uptime() + (data[2])
+
+                repeat
+                    local signal = {computer.pullSignal(deadline - computer.uptime())}
+
+                    if signal[1] == "key_down" or signal[1] == "key_up" or signal[1] == "clipboard" and sandbox.component.list[signal[2]] then
+                        table.insert(sandbox.signalQueue, 1, signal)
+                        break
+                    end
+                until computer.uptime() >= deadline
+            else
+                break
+            end
+        else
+            print(data[2])
         end
-    else
-        print(data[3])
     end
 end
+
+thread.create(supervisor):detach():attach(2)
