@@ -26,8 +26,8 @@ local function spcall(...)
     end
 end
 
-local function createSandbox()
-    local sandbox, libcomponent, libcomputer, env
+local function createContainer()
+    local container, libcomponent, libcomputer, sandbox
     local components, cache, signalQueue = {}, {}, {}
 
     libcomponent = {
@@ -58,7 +58,7 @@ local function createSandbox()
             local componentsFiltered = {}
             local componentsFilteredIndex = {}
             for address in pairs(components) do
-                if not filter or (exact and components[address].type == filter or components[address].type:match(filter)) then
+                if not filter or (exact and components[address].type == filter or components[address].type:find(filter)) then
                     componentsFiltered[address] = components[address].type
                     table.insert(componentsFilteredIndex, {
                         address, components[address].type
@@ -118,7 +118,7 @@ local function createSandbox()
     libcomputer = {
         pullSignal = function(timeout)
             local signal = coroutine.yield(timeout or math.huge)
-            table.remove(sandbox.signalQueue, 1)
+            table.remove(container.signalQueue, 1)
             return table.unpack(signal or {})
         end,
         pushSignal = function(...)
@@ -126,18 +126,19 @@ local function createSandbox()
         end,
         address = setmetatable({}, {
             __call = function()
-                return sandbox.address
+                return container.address
             end,
             __tostring = function()
-                return sandbox.address
+                return container.address
             end
         }),
-        shutdown = function() coroutine.yield(true) end,
+        shutdown = function() coroutine.yield("SHUTDOWN") end,
         getDeviceInfo = function() return {} end,
         tmpAddress = computer.tmpAddress,
+        freeMemory = computer.freeMemory,
         totalMemory = computer.totalMemory,
         uptime = function ()
-            return computer.uptime() - sandbox.startUptime
+            return computer.uptime() - container.startUptime
         end,
         energy = 1000,
         maxEnergy = 1000,
@@ -151,8 +152,7 @@ local function createSandbox()
         setArchitecture = function() end,
     }
 
-    env = {
-        _G = nil,
+    sandbox = {
         assert = assert,
         error = error,
         getmetatable = getmetatable,
@@ -189,29 +189,24 @@ local function createSandbox()
             clock = os.clock,
             date = os.date,
             difftime = os.difftime,
-            execute = nil,
-            exit = nil,
-            remove = nil,
-            rename = nil,
-            time = os.time,
-            tmpname = nil
+            time = os.time
         },
+        ipairs = ipairs,
         debug = debug,
         utf8 = utf8,
         checkArg = checkArg,
         component = libcomponent,
         computer = libcomputer,
-        unicode = unicode,
-        print = print
+        unicode = unicode
     }
-    env._G = env
+    sandbox._G = sandbox
 
-    sandbox = {
+    container = {
         address = uuid(),
         coroutine = nil,
         signalQueue = signalQueue,
         startUptime = 0,
-        env = env,
+        sandbox = sandbox,
         component = {
             add = function(type, slot, callbacks)
                 local UUID
@@ -231,11 +226,11 @@ local function createSandbox()
                     fields = {}
                 }
 
-                sandbox.env.computer.pushSignal("component_added", UUID, type)
+                container.sandbox.computer.pushSignal("component_added", UUID, type)
             end,
             remove = function(address)
                 if components[address] then
-                    sandbox.env.computer.pushSignal("component_removed", address, components[address].type)
+                    container.sandbox.computer.pushSignal("component_removed", address, components[address].type)
                     components[address] = nil
                 end
             end,
@@ -260,10 +255,10 @@ local function createSandbox()
             cache = cache
         },
         bootstrap = function(code)            
-            local chunk, err = load(code, "=container", "t", env)
+            local chunk, err = load(code, "=container", "t", sandbox)
 
             if chunk then
-                sandbox.coroutine = (
+                container.coroutine = coroutine.create(
                     function()
                         coroutine.yield(xpcall(chunk, debug.traceback))
                     end
@@ -273,29 +268,15 @@ local function createSandbox()
             return chunk, err
         end,
         pause = function()
-            sandbox.paused = true
+            container.paused = true
         end,
         resume = function()
-            sandbox.paused = false
+            container.paused = false
         end
     }
 
-    return sandbox
+    return container
 end
-
-_G. sandbox = createSandbox()
-sandbox.component.pass(component.get('eec')) -- gpu
-sandbox.component.pass(component.get('6e1')) -- screen
-sandbox.component.pass(component.get('33c')) -- keyboard
-sandbox.component.pass(component.internet.address)
-sandbox.component.pass(component.computer.address)
-sandbox.component.pass(component.eeprom.address)
-
-local file = io.open("./bootstrap-test.lua", "r")
-local data = file:read("a")
-file:close()
-
-sandbox.bootstrap(data)
 
 -- local event, hypervisor = require("event")
 
@@ -306,28 +287,28 @@ sandbox.bootstrap(data)
 -- end
 
 -- local function resume()
---     if not sandbox.paused then
---         local data = {coroutine.resume(sandbox.coroutine, sandbox.signalQueue[1])}
+--     if not container.paused then
+--         local data = {coroutine.resume(container.coroutine, container.signalQueue[1])}
 
 --         if data[2] then
 --             if type(data[2]) == "number" then
 --                 event.timer(data[2], resume)
 --             else
 --                 ignoreEvents()
---                 sandbox = nil
+--                 container = nil
 --             end
 --         else
 --             debug_print(data[3])
 --             ignoreEvents()
---             sandbox = nil
+--             container = nil
 --         end
 --     end
 -- end
 
 -- function hypervisor(...)
 --     local signal = {...}
---     if sandbox.component.list[signal[2]] then
---         table.insert(sandbox.signalQueue, 1, signal)
+--     if container.component.list[signal[2]] then
+--         table.insert(container.signalQueue, 1, signal)
 --         event.cancel(resumeTimer)
 --         resume()
 --     end
@@ -336,33 +317,67 @@ sandbox.bootstrap(data)
 -- event.listen("key_down", hypervisor)
 -- event.listen("key_up", hypervisor)
 -- event.listen("clipboard", hypervisor)
--- resume()b
+-- resume()
+
+local container = createContainer()
+container.component.pass('eec093b4-7529-48a1-bd6a-b1ed5816d410') -- gpu
+container.component.pass('7da60adc-bc35-43c6-a1b5-91c2c25fa7cd') -- screen
+container.component.pass('f1ce1629-706a-480b-a216-863cee2906a6') -- keyboard
+container.component.pass(computer.tmpAddress())
+container.component.pass(component.get('807'))
+container.component.pass(component.internet.address)
+container.component.pass(component.computer.address)
+container.component.pass(component.eeprom.address)
+
+local file = io.open("/home/box/bootstrap-test.lua", "r")
+local data = file:read("a")
+file:close()
+
+container.bootstrap(data)
 
 local function supervisor() 
     while true do    
-        local data = {coroutine.resume(sandbox.coroutine, sandbox.signalQueue[1])}
+        local data = {coroutine.resume(container.coroutine, container.signalQueue[1])}
         
-        if sandbox.paused then
+        print(table.unpack(data))
+        if container.paused then
+            print("PAUSED")
             break
         elseif data[1] then
-            if type(data[2]) == "number" then
+            if type(data[2]) == "number" and not container.signalQueue[1] then
                 local deadline = computer.uptime() + (data[2])
 
                 repeat
                     local signal = {computer.pullSignal(deadline - computer.uptime())}
 
-                    if signal[1] == "key_down" or signal[1] == "key_up" or signal[1] == "clipboard" and sandbox.component.list[signal[2]] then
-                        table.insert(sandbox.signalQueue, 1, signal)
+                    if container.component.list[signal[2]] and (signal[1] == "key_down" or signal[1] == "key_up" or signal[1] == "clipboard") then
+                        table.insert(container.signalQueue, 1, signal)
                         break
                     end
                 until computer.uptime() >= deadline
-            else
-                break
+            elseif data[2] == "SHUTDOWN" then
+            else -- Yield from container
+                if container.signalQueue[1] then
+                    coroutine.resume(container.coroutine, container.signalQueue[1])
+                else
+                    local signal = {computer.pullSignal()}
+
+                    if container.component.list[signal[2]] and (signal[1] == "key_down" or signal[1] == "key_up" or signal[1] == "clipboard") then
+                        coroutine.resume(container.coroutine, signal)
+                    end
+                end
             end
         else
-            print(data[2])
+            print(table.unpack(data)) -- Error encountered
+            break
         end
     end
 end
 
-thread.create(supervisor):detach():attach(2)
+component.setPrimary('gpu', 'e5765f35-6570-4423-a12d-4d75457aa29c')
+component.setPrimary('screen', '3973a0e2-cecf-466a-9a42-806a5f3d3ce9')
+-- thread.create(supervisor):detach()
+io.stdin:write("\n\n\n.!.")
+io.stdin:write(xpcall(supervisor, debug.traceback))
+component.setPrimary('gpu', 'e5765f35-6570-4423-a12d-4d75457aa29c')
+component.setPrimary('screen', '3973a0e2-cecf-466a-9a42-806a5f3d3ce9')
