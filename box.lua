@@ -1,23 +1,6 @@
-local shell = require("shell")
 local component = require("component")
 local computer = require("computer")
 local unicode = require("unicode")
-local serialization = require("serialization")
-local thread = require("thread")
-local process = require("process")
-local coroutine_
-
-for _, v in pairs(process.list) do
-    if v.path == "/init.lua" then
-        coroutine_ = v.data.coroutine_handler
-        break
-    end
-end
-
-local coroutine = coroutine_
-coroutine.create = function(f)
-    coroutine_.create(f, true)
-end
 
 local methods = require("box.methods")
 local docs = require("box.docs")
@@ -41,135 +24,71 @@ local function spcall(...)
     end
 end
 
-local function createContainer()
-    local container, libcomponent, libcomputer, sandbox
-
-    libcomponent = {
-        doc = function(address, method)
-            checkArg(1, address, "string")
-            checkArg(2, method, "string")
-            if container.component.list[address].pass then
-                return component.doc(address, method)
-            end
-            return docs[container.component.list[address].type] or {}
-        end,
-        methods = function(address)
-            checkArg(1, address, "string")
-            if container.component.list[address].pass then
-                return component.methods(address)
-            end
-            return methods[container.component.list[address].type] or {}
-        end,
-        invoke = function(address, method, ...)
-            checkArg(1, address, "string")
-            checkArg(2, method, "string")
-            if container.component.list[address].pass then
-                return component.invoke(address, method, ...)
-            end
-            return spcall(container.component.list[address].callback[method], ...)
-        end,
-        list = function(filter, exact)
-            local componentsFiltered = {}
-            local componentsFilteredIndex = {}
-            for address in pairs(container.component.list) do
-                if not filter or (exact and container.component.list[address].type == filter or container.component.list[address].type:find(filter)) then
-                    componentsFiltered[address] = container.component.list[address].type
-                    table.insert(componentsFilteredIndex, {
-                        address, container.component.list[address].type
-                    })
-                end
-            end
-            local i = 0
-            return setmetatable(componentsFiltered, {
-                __call = function()
-                    i = i + 1
-                    if componentsFilteredIndex[i] then
-                        return componentsFilteredIndex[i][1], componentsFilteredIndex[i][2]
-                    end
-                end
-            })
-        end,
-        fields = function(address) -- Legacy???
-            checkArg(1, address, "string")
-            return container.component.list[address].fields
-        end,
-        proxy = function(address)
-            checkArg(1, address, "string")
-            if container.component.cache[address] then
-                return container.component.cache[address]
-            end
-            if container.component.list[address] then
-                if container.component.list[address].pass then
-                    return component.proxy(address)
-                end
-                local proxy = {address = address, type = container.component.list[address].type, slot = container.component.list[address].slot}
-                for key in pairs(container.component.list[address].callback) do
-                    proxy[key] = setmetatable({}, {
-                        __call = function(...)
-                            return libcomponent.invoke(address, key, ...)
-                        end,
-                        __tostring = function()
-                            return libcomponent.doc(address, key) or tostring(container.component.list[address].callback[key])
-                        end
-                    })
-                end
-                container.component.cache[address] = proxy
-                return proxy
-            else
-                return nil, "no such component"
-            end
-        end,
-        type = function(address)
-            checkArg(1, address, "string")
-            return container.component.list[address].type
-        end,
-        slot = function(address)
-            checkArg(1, address, "string")
-            return container.component.list[address].slot
+local function resume(self)
+    if self.coroutine then
+        if self.paused then
+            return false, "container is paused"
         end
-    }
 
-    libcomputer = {
-        pullSignal = function(timeout)
-            local signal = coroutine_.yield(timeout or math.huge)
-            table.remove(container.signalQueue, 1)
-            return table.unpack(signal or {})
-        end,
-        pushSignal = function(...)
-            table.insert(container.signalQueue, table.pack(...))
-        end,
-        address = setmetatable({}, {
-            __call = function()
-                return container.address
-            end,
-            __tostring = function()
-                return container.address
+        local signal = self.signalQueue[1] or {}
+        table.remove(self.signalQueue, 1)
+        local result = table.pack(coroutine.resume(self.coroutine, table.unpack(signal)))
+
+        if result[1] then -- coroutine resume successfull
+            if result[2] == "error" then
+                return false, result[3]
             end
-        }),
-        shutdown = function() 
-            container.coroutine = nil
-            coroutine_.yield(0)
-        end,
-        getDeviceInfo = function() return {} end,
-        tmpAddress = computer.tmpAddress,
-        freeMemory = computer.freeMemory,
-        totalMemory = computer.totalMemory,
-        uptime = function ()
-            return computer.uptime() - container.startUptime
-        end,
-        energy = 1000,
-        maxEnergy = 1000,
-        users = {},
-        addUser = function() return false end,
-        removeUser = function() return false end,
-        beep = computer.beep,
-        getProgramLocations = computer.getProgramLocations,
-        getArchitecture = computer.getArchitecture,
-        getArchitectures = computer.getArchitectures,
-        setArchitecture = function() end,
-    }
+            if result[2] == false then
+                self.coroutine = nil
+                return false, "container is shutdown"
+            end
+            if result[2] == true then
+                local success, result = self:bootstrap()
 
-    sandbox = {
+                if success then
+                    return true, 0
+                end
+
+                return false, result
+            end
+            if coroutine.status(self.coroutine) == "dead" then
+                return false, "computed halted"
+            end
+            return true, result[2] or math.huge
+        end
+        
+        return false, result[2] or "unknown error" -- probably coroutine is dead
+    end
+    
+    return false, "coroutine is not exists"
+end
+
+local function loop(self)
+    while true do
+        local success, result = self:resume()
+
+        if success then
+            if not self.signalQueue[1] then
+                local deadline = computer.uptime() + result
+
+                repeat
+                    local signal = {computer.pullSignal(deadline - computer.uptime())}
+
+                    if self:passSignal(signal) then
+                        break
+                    end
+                until computer.uptime() >= deadline
+            end
+        else
+            return result
+        end
+    end
+end
+
+local function bootstrap(self)
+    self.signalQueue = {}
+    self.componentCache = {}
+    self.sandbox = {
         assert = assert,
         error = error,
         getmetatable = getmetatable,
@@ -187,17 +106,47 @@ local function createContainer()
         type = type,
         _VERSION = _VERSION,
         xpcall = xpcall,
+        load = load,
         coroutine = {
-            create = coroutine_.create,
-            resume = coroutine_.resume,
-            running = coroutine_.running,
-            status = coroutine_.status,
-            wrap = coroutine_.wrap,
-            yield = function(...)
-                return coroutine_.yield(nil, ...)
+            create = coroutine.create,
+            resume = function(co, ...) -- custom resume part for bubbling sysyields
+                checkArg(1, co, "thread")
+                local args = table.pack(...)
+                while true do -- for consecutive sysyields
+                    local result = table.pack(
+                    coroutine.resume(co, table.unpack(args, 1, args.n)))
+                    if result[1] then -- success: (true, sysval?, ...?)
+                        if coroutine.status(co) == "dead" then -- return: (true, ...)
+                            return true, table.unpack(result, 2, result.n)
+                        elseif result[2] ~= nil then -- yield: (true, sysval)
+                            args = table.pack(coroutine.yield(result[2]))
+                        else -- yield: (true, nil, ...)
+                            return true, table.unpack(result, 3, result.n)
+                        end
+                    else -- error: result = (false, string)
+                        return false, result[2]
+                    end
+                end
             end,
-            isyieldable = coroutine_.isyieldable
-        },
+            running = coroutine.running,
+            status = coroutine.status,
+            wrap = function(f) -- for bubbling coroutine.resume
+                local co = coroutine.create(f)
+                return function(...)
+                    local result = table.pack(self.coroutine.resume(co, ...))
+                    if result[1] then
+                        return table.unpack(result, 2, result.n)
+                    else
+                        error(result[2], 0)
+                    end
+                end
+            end,
+            yield = function(...) -- custom yield part for bubbling sysyields
+                return coroutine.yield(nil, ...)
+            end,
+            -- Lua 5.3.
+            isyieldable = coroutine.isyieldable
+        },        
         string = string,
         table = table,
         math = math,
@@ -212,161 +161,289 @@ local function createContainer()
         debug = debug,
         utf8 = utf8,
         checkArg = checkArg,
-        component = libcomponent,
-        computer = libcomputer,
+        component = {
+            doc = function(address, method)
+                checkArg(1, address, "string")
+                checkArg(2, method, "string")
+                if self.components[address].pass then
+                    return component.doc(address, method)
+                end
+                return docs[self.components[address].type] or {}
+            end,
+            methods = function(address)
+                checkArg(1, address, "string")
+                if self.components[address].pass then
+                    return component.methods(address)
+                end
+                return methods[self.components[address].type] or {}
+            end,
+            invoke = function(address, method, ...)
+                checkArg(1, address, "string")
+                checkArg(2, method, "string")
+                if self.components[address].pass then
+                    return component.invoke(address, method, ...)
+                end
+                return spcall(self.components[address].callback[method], ...)
+            end,
+            list = function(filter, exact)
+                local componentsFiltered = {}
+                local componentsFilteredIndex = {}
+                for address in pairs(self.components) do
+                    if not filter or (exact and self.components[address].type == filter or self.components[address].type:find(filter)) then
+                        componentsFiltered[address] = self.components[address].type
+                        table.insert(componentsFilteredIndex, {
+                            address, self.components[address].type
+                        })
+                    end
+                end
+                local i = 0
+                return setmetatable(componentsFiltered, {
+                    __call = function()
+                        i = i + 1
+                        if componentsFilteredIndex[i] then
+                            return componentsFilteredIndex[i][1], componentsFilteredIndex[i][2]
+                        end
+                    end
+                })
+            end,
+            fields = function(address) -- Legacy???
+                checkArg(1, address, "string")
+                return self.components[address].fields
+            end,
+            proxy = function(address)
+                checkArg(1, address, "string")
+                if self.componentCache[address] then
+                    return self.componentCache[address]
+                end
+                if self.components[address] then
+                    if self.components[address].pass then
+                        return component.proxy(address)
+                    end
+                    local proxy = {address = address, type = self.components[address].type, slot = self.components[address].slot}
+                    for key in pairs(self.components[address].callback) do
+                        proxy[key] = setmetatable({}, {
+                            __call = function(...)
+                                return self.sandbox.invoke(address, key, ...)
+                            end,
+                            __tostring = function()
+                                return self.sandbox.doc(address, key) or tostring(self.components[address].callback[key])
+                            end
+                        })
+                    end
+                    self.componentCache[address] = proxy
+                    return proxy
+                else
+                    return nil, "no such component"
+                end
+            end,
+            type = function(address)
+                checkArg(1, address, "string")
+                return self.components[address].type
+            end,
+            slot = function(address)
+                checkArg(1, address, "string")
+                return self.components[address].slot
+            end
+        },
+        computer = {
+            pullSignal = function(timeout)
+                return coroutine.yield(timeout)
+            end,
+            pushSignal = function(...)
+                table.insert(self.signalQueue, table.pack(...))
+                return true
+            end,
+            address = function()
+                return self.address
+            end,
+            getDeviceInfo = function() return {} end,
+            tmpAddress = computer.tmpAddress,
+            freeMemory = computer.freeMemory,
+            totalMemory = computer.totalMemory,
+            uptime = function()
+                return computer.uptime() - self.startUptime
+            end,
+            energy = 1000,
+            maxEnergy = 1000,
+            users = {},
+            shutdown = function(reboot)
+                coroutine.yield(not not reboot)
+            end,
+            addUser = function() return false end,
+            removeUser = function() return false end,
+            beep = function(...)
+                computer.beep(...)
+                coroutine.yield(0)
+            end,
+            getProgramLocations = computer.getProgramLocations,
+            getArchitecture = computer.getArchitecture,
+            getArchitectures = computer.getArchitectures,
+            setArchitecture = function() end,
+        },
         unicode = unicode
     }
-    sandbox._G = sandbox
+    self.sandbox._G = self.sandbox
 
-    container = {
-        address = uuid(),
-        coroutine = nil,
-        signalQueue = {},
-        startUptime = 0,
-        sandbox = sandbox,
-        component = {
-            add = function(type, slot, callbacks)
-                local UUID
-                repeat
-                    UUID = uuid()
-                until not container.component.list[UUID] and not component.type(UUID)
-                
-                container.component.list[UUID] = {
-                    address = UUID, 
-                    type = type, 
-                    slot = slot, 
-                    callback = setmetatable(callbacks, {
-                        __index = function()
-                            error("no such method")
-                        end
-                    }),
-                    fields = {}
-                }
+    local eeprom = self.sandbox.component.list("eeprom")()
+    if eeprom then
+        local code = self.sandbox.component.invoke(eeprom, "get")
+        if code and #code > 0 then
+            local bios, reason = load(code, "=bios", "t", self.sandbox)
+            if bios then
+                self.coroutine = coroutine.create(function()
+                    self.startUptime = computer.uptime()
+                    local success, result = xpcall(bios, debug.traceback)
 
-                container.sandbox.computer.pushSignal("component_added", UUID, type)
-            end,
-            remove = function(address)
-                if container.component.list[address] then
-                    container.sandbox.computer.pushSignal("component_removed", address, container.component.list[address].type)
-                    container.component.list[address] = nil
-                end
-            end,
-            pass = function(address)
-                if component.get(address) then
-                    container.component.list[address] = container.component.list[address] or {
-                        address = address,
-                        type = component.type(address),
-                        slot = component.slot(address),
-                        fields = component.fields(address),
-                        pass = true
-                    }
+                    if success then
+                        coroutine.yield()
+                    end
 
-                    return true
-                else
-                    return false, "component " .. address .. "is not available"
-                end
-            end,
-            list = {},
-            cache = {}
-        },
-        bootstrap = function(code)            
-            local chunk, err = load(code, "=container", "t", container.sandbox)
-
-            if chunk then
-                container.coroutine = coroutine_.create(function()
-                    coroutine_.yield("error", xpcall(chunk, debug.traceback))
+                    coroutine.yield("error", result)
                 end)
                 return true
             end
+            return false, "failed loading bios: " .. reason
+        end
+    end
+    return false, "no bios found; install a configured EEPROM"
+end
 
-            return chunk, err
-        end,
-        resume = function()
-            if container.coroutine then
-                if container.paused then
-                    return false, "container is paused"
-                end
-
-                local result = table.pack(coroutine_.resume(container.coroutine, container.signalQueue[1]))
-
-                if result[1] then -- coroutine resume successfull
-                    if result[2] == "error" then
-                        return false, result[4]
-                    end
-                    if result[2] == "SHUTDOWN" then
-                        container.coroutine = nil
-                        return true, "shutdown"
-                    end
-                    if result[2] == nil then
-                        return true, math.huge
-                    end
-                    if type(result[2]) == "number" then
-                        return true, result[2]
-                    end
-                    return false
-                end
-                
-                return false, result[2] -- probably coroutine is dead
+local function addComponent(self, type, slot, callbacks)
+    local UUID
+    repeat
+        UUID = uuid()
+    until not self.components[UUID] and not component.type(UUID)
+    
+    self.components[UUID] = {
+        address = UUID, 
+        type = type, 
+        slot = slot, 
+        callback = setmetatable(callbacks, {
+            __index = function()
+                error("no such method")
             end
-            
-            return false, "container is shut down"
-        end,
-        state = function()
-            container.paused = not container.paused
-        end,
-        passSignal = function(signal)
-            if signals[signal[1]] then
-                return signals[signal[1]](container, signal)
-            end
-            return false
-        end,
+        }),
+        fields = {}
+    }
+
+    self:pushSignal{"component_added", UUID, type}
+end
+
+local function readdPassedComponent(self, address)
+    if self.passedComponents[address] then
+        if self.components[address] then
+            self:removeComponent(address)
+        end
+        self.components[address] = self.passedComponents[address]
+        self:pushSignal{"component_added", address, self.passedComponents[address].type}
+        return true
+    end
+    return false
+end
+
+local function passComponent(self, address)
+    if component.get(address) then
+        if self.components[address] then
+            return false, "component " .. address .. " collision detected"
+        end
+
+        self.passedComponents[address] = {
+            address = address,
+            type = component.type(address),
+            slot = component.slot(address),
+            fields = component.fields(address),
+            pass = true
+        }
+
+        return self:readdPassedComponent(address)
+    else
+        return false, "component " .. address .. "is not available"
+    end
+end
+
+local function removeComponent(self, address)
+    if self.components[address] then
+        self:pushSignal{"component_removed", address, self.components[address].type}
+        self.components[address] = nil
+    end
+end
+
+local function removePassedComponent(self, address)
+    self:removeComponent(self, address)
+    self.passedComponents[address] = nil
+    return true
+end
+
+local function pushSignal(self, signal)
+    table.insert(self.signalQueue, 1, signal)
+end
+
+local function passSignal(self, signal)
+    if signals[signal[1]] then
+        return signals[signal[1]](self, signal)
+    end
+    return false
+end
+
+local function createContainer()
+    local container = {}
+
+    container = {
+        address = uuid(),
+        components = {},
+        passedComponents = {},
+
+        signalQueue = {},
+        componentCache = nil,
+        sandbox = nil,
+        startUptime = nil,
+
+        addComponent = addComponent,
+        readdPassedComponent = readdPassedComponent,
+        passComponent = passComponent,
+        removeComponent = removeComponent,
+        removePassedComponent = removePassedComponent,
+        pushSignal = pushSignal,
+        passSignal = passSignal,
+        bootstrap = bootstrap,
+        resume = resume,
+        loop = loop,
     }
 
     return container
 end
 
-local container = createContainer()
-container.component.pass(component.gpu.address) -- gpu
-container.component.pass(component.screen.address) -- screen
-container.component.pass(component.keyboard.address) -- keyboard
-container.component.pass(computer.tmpAddress())
-container.component.pass(component.internet.address)
-container.component.pass(component.computer.address)
-container.component.pass(component.eeprom.address)
-container.component.pass(component.get("2da")) -- boot drive
+-- local container = createContainer()
 
-local file = io.open("/home/box/eeprom.lua", "r")
-local data = file:read("a")
-file:close()
+-- container:passComponent(component.gpu.address)
+-- container:passComponent(component.screen.address)
+-- container:passComponent(component.keyboard.address)
+-- container:passComponent(computer.tmpAddress())
+-- container:passComponent(component.internet.address)
+-- container:passComponent(component.computer.address)
+-- container:passComponent(component.eeprom.address)
+-- container:passComponent(component.get("2da")) -- boot floppy
 
-container.bootstrap(data)
+-- require("process").info().data.signal = function() end
+-- local success, reason = container:bootstrap()
 
-local function supervisor() 
-    while true do
-        local success, result = container.resume()
+-- if not success then
+--     print(reason)
+--     os.exit()
+-- end
 
-        if success then
-            if container.coroutine then
-                if not container.signalQueue[1] then
-                    local deadline = computer.uptime() + result -- result is always number if coroutine is alive
+-- local stopReason = container:loop()
+-- component.gpu.setBackground(0x000000)
+-- component.gpu.setForeground(0xffffff)
+-- require("tty").clear()
+-- print(stopReason .. "\nPress any key to continue")
 
-                    repeat
-                        local signal = {computer.pullSignal(deadline - computer.uptime())}
+-- while true do
+--     if require("event").pull("key_down") then
+--         os.exit()
+--     end
+-- end
 
-                        if container.passSignal(signal) then
-                            break
-                        end
-                    until computer.uptime() >= deadline
-                end
-            else
-                print(result)
-            end
-        else
-            print(result or "unknown error")
-            break
-        end
-    end
-end
-
-supervisor()
-container = nil
+return {
+    createContainer = createContainer
+}
