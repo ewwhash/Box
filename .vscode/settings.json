@@ -2,5 +2,8 @@
     "Lua.diagnostics.globals": [
         "checkArg",
         "bit32"
+    ],
+    "Lua.diagnostics.disable": [
+        "unbalanced-assignments"
     ]
 }
