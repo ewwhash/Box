@@ -1,6 +1,6 @@
-local component = require and require("component") or component or error("no component library")
-local computer = require and require("computer") or computer or error("no computer library")
-local unicode = require and require("unicode") or unicode or error("no unicode library")
+local component = component or require and require("component") or error("no component library")
+local computer = computer or require and require("computer") or error("no computer library")
+local unicode = unicode or require and require("unicode") or error("no unicode library")
 
 local function spcall(...)
     local result = table.pack(pcall(...))
@@ -20,6 +20,13 @@ local signals = { -- signal passthrough
         return false
     end,
     key_up = function(container, signal)
+        if container.components[signal[2]] then
+            container:pushSignal(signal)
+            return true
+        end
+        return false
+    end,
+    screen_resized = function(container, signal)
         if container.components[signal[2]] then
             container:pushSignal(signal)
             return true
