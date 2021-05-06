@@ -110,7 +110,7 @@ local signals = { -- signal passthrough
         if container.passedComponents[signal[2]] then
             container:readdPassedComponent(signal[2])
             return true
-        elseif signal[2] == spcall(container.libcomponent.invoke, container.libcomponent.list("disk_drive")(), "media") then
+        elseif signal[2] == pcall(container.libcomponent.invoke, container.libcomponent.list("disk_drive")(), "media") then
             container:passComponent(signal[2])
             return true
         end
@@ -551,7 +551,9 @@ local function createContainer()
         checkArg = checkArg,
         component = libcomponent,
         computer = libcomputer,
-        unicode = unicode
+        unicode = unicode,
+        
+        print = print
     }
     sandbox._G = sandbox
 
@@ -588,21 +590,25 @@ local function createContainer()
     return container
 end
 
-local gpu = component.gpu
+local oldPalette, oldBackground, oldForeground, oldWidth, oldHeight = {}, component.gpu.getBackground(), component.gpu.getForeground()
+
 local container = createContainer()
 
 container:passComponent(component.keyboard.address)
 container:passComponent(component.internet.address)
 container:passComponent(computer.tmpAddress())
 container:passComponent(component.computer.address)
-container:passComponent(component.get('b46')) -- disk drive
+container:passComponent(component.gpu.address)
+container:passComponent(component.screen.address)
+-- container:passComponent(component.get('b46')) -- disk drive
 
-local eepromData = ""
 container:addComponent("eeprom", container:randomComponentUUID(), {
     get = function()
-        return [[
-local a,b,c,d,e,f,g,h,i,j,k,l,m,n=component,computer,unicode,math,{"/init.lua","/OS.lua"},{},{},{}local function o(p)local q={b.pullSignal(p)}q[1]=q[1]or""if cyan and(q[1]:match("ey")and not cyan:match(q[5])or q[1]:match("cl")and not cyan:match(q[4]))then return""end;g[q[4]or""]=q[1]:match"do"and 1;if g[29]and(g[46]or g[32])and q[1]:match"do"then return"F"end;return table.unpack(q)end;local function r(s)return a.list(s)()and a.proxy(a.list(s)())end;local function t(u,v)n={}for w in u:gmatch"[^\r\n]+"do n[#n+1]=w:gsub("\t",v and"    "or"")end end;local function x(p,y,z,A,B,C,D)A=b.uptime()+(p or d.huge)::E::B,D,D,C=o(A-b.uptime())if B=="F"or B:match"do"and(C==y or y==0)then return 1,z and z()elseif b.uptime()<A then goto E end end;local function G(H,I,J,K,L)k.setBackground(K or 0x002b36)k.setForeground(L or 0x8cb9c5)k.set(H,I,J)end;local function M(H,I,N,O,K,L)k.setBackground(K or 0x002b36)k.setForeground(L or 0x8cb9c5)k.fill(H,I,N,O," ")end;local function P()M(1,1,i,j)end;local function Q(R)return d.floor(i/2-R/2)end;local function S(I,u,K,L)G(Q(c.len(u)),I,u,K,L)end;local function T()k,l=r"gp",r"sc"if k and l then if k.getScreen()~=l.address then k.bind(l.address)end;local U,V,W=l.getAspectRatio()i,j=k.maxResolution()W=2*(16*U-4.5)/(16*V-4.5)if W>i/j then j=d.floor(i/W)else i=d.floor(j*W)end;k.setResolution(i,j)k.setPaletteColor(9,0x002b36)k.setPaletteColor(11,0x8cb9c5)end end;local function X(u,Y,Z,y,z,I)if k and l then P()t(u)I=d.ceil(j/2-#n/2)if Y then S(I-1,Y,0x002b36,0xffffff)I=I+1 end;for _=1,#n do S(I,n[_])I=I+1 end;x(Z or 0,y or 0,z)end end;local function a0(u,a1)return c.len(u)>a1 and c.sub(u,1,a1).."…"or u end;local function a2(a3,I,a4,a5,L)local u,a6,a7,a8,a9,H,B,aa,C,D="",c.len(a3),1,1;L=L or 0x8cb9c5::E::H=a4 and Q(c.len(u)+a6)or 1;a9=H+a6+a7-1;M(1,I,i,1)G(H,I,a3 ..u,F,L)if a9<=i then G(a9,I,k.get(a9,I),a8 and L or 0x002b36,a8 and 0x002b36 or L)end;B,D,aa,C=o(.5)if B:match"do"then if C==203 and a7>1 then a7=a7-1 elseif C==205 and a7<=c.len(u)then a7=a7+1 elseif C==200 and a5 then u=a5;a7=c.len(a5)+1 elseif C==208 and a5 then u=""a7=1 elseif C==14 and#u>0 and a7>1 then u=g[29]and""or c.sub(c.sub(u,1,a7-1),1,-2)..c.sub(u,a7,-1)a7=g[29]and 1 or a7-1 elseif C==28 then return u elseif aa>=32 and c.len(a6 ..u)<i-a6 then u=c.sub(u,1,a7-1)..c.char(aa)..c.sub(u,a7,-1)a7=a7+1 end;a8=1 elseif B:match"cl"then u=c.sub(u,1,a7-1)..aa..c.sub(u,a7,-1)a7=a7+c.len(aa)elseif B:match"mp"or B=="F"then m=B:match"mp"and 1;return elseif not B:match"up"then a8=not a8 end;goto E end;local function ab(C,ac,ad,ae,af)af=af or xpcall;local ag,ah=load("return "..C,ac,F,ad)if not ag then ag,ah=load(C,ac,F,ad)end;if ag then if ae and k then x(.3)M(1,1,i or 0,j or 0,0)k.setPaletteColor(9,0x969696)k.setPaletteColor(11,0xb4b4b4)end;return af(ag,debug.traceback)end;return F,ah end;local function ai(aj)local r,ak,al,_=a.proxy(aj),{s=1,z=1}if r and aj~=b.tmpAddress()then _=#f+1;f[_]={r=r,l=ak,d=r,p=function(am,I)am=am and P()or am;S(I or j/2,am and("Booting %s from %s (%s)"):format(al,r.getLabel()or"N/A",a0(aj,i>80 and 36 or 6))or al and("Boot%s %s (%s)"):format((#ak==1 and" "..al or"").." from",a0(r.getLabel()or"N/A",6),a0(aj,6))or("Boot from %s (%s) isn't available"):format(r.getLabel()or"N/A",a0(aj,6)),F,not am and 0xffffff)am=am and not h and cyan:match("$")and(X("Hold ENTER to boot")or x(F,28))end}f[_].b=function()if al then local an,ao,ag,ap,ah=r.open(al,"r"),""::E::ag=r.read(an,d.huge)if ag then ao=ao..ag;goto E end;r.close(an)pcall(f[_].p,1)ag=b.getBootAddress()~=aj and b.setBootAddress(aj)ap,ah=ab(ao,"="..al,F,1)ap=ap and pcall(b.shutdown)pcall(T)pcall(X,ah,"¯\\_(ツ)_/¯",d.huge,0,b.shutdown)error(ah)end end;for aq=1,#e do if r.exists(e[aq])then al=al or e[aq]ak[#ak+1]={e[aq],function()al=e[aq]f[_].b()end}end end end end;local function ar()f={}ai(b.getBootAddress()or"")for aj in next,a.list"file"do ai(aj~=b.getBootAddress()and aj or"")end end;local function as(at,I,au,av,aw,ax)local ay,H=0;for _=1,#at do ay=ay+c.len(at[_][1])+au end;ay=ay-au;H=Q(ay)if ax then ax()end;for _=1,#at do if at.s==_ and aw then M(H-au/2,I-d.floor(av/2),c.len(at[_][1])+au,av,0x8cb9c5)G(H,I,at[_][1],0x8cb9c5,0x002b36)else G(H,I,at[_][1],0x002b36,0x8cb9c5)end;H=H+c.len(at[_][1])+au end end;local function az(ad,ao,aA,u)P()ad=setmetatable({print=function(...)u=table.pack(...)for _=1,u.n do if type(u[_])=="table"then aA=''for aB,aC in pairs(u[_])do aA=aA..tostring(aB).."    "..tostring(aC).."\n"end;u[_]=aA else u[_]=tostring(u[_])end end;t(table.concat(u,"    "),1)for _=1,#n do k.copy(1,1,i,j-1,0,-1)M(1,j-1,i,1)G(1,j-1,n[_])end end,proxy=r,sleep=function(p)x(p,32,error)end},{__index=_G})::E::ao=a2("> ",j,F,ao,0xffffff,ad)if ao then ad.print("> "..ao)M(1,j,i,1)G(1,j,">")ad.print(select(2,ab(ao,"=shell",ad)))goto E end end;local function aD()h=1,not k and error("No drives available")::aE::local aF,aG,aH,aI,B,C,aJ,aK,I,aL,aM,D={s=1}aH={s=1,p=1,{"Halt",b.shutdown},{"Shell",az},r"net"and{"Netboot",function()P()S(j/2-1,"Netboot",F,0xffffff)aK=a2("URL: ",j/2+1,1,F,0x8cb9c5)if aK and#aK>0 then local an,ao,ag=r"net".request(aK,F,F,{["user-agent"]="Netboot"}),""if an then X("Downloading script...","Netboot")::E::ag=an.read()if ag then ao=ao..ag;goto E end;ao=select(2,ab(ao,"=stdin",F,1,pcall))or""T()X(ao,"Netboot",#ao==0 and 0 or d.huge)else X("Invalid URL","Netboot",d.huge)end end end}}aG=#aH+1;m=F;aM=F;ar()for _=1,#f do aF[_]={a0(f[_].d.getLabel()or"N/A",6),function()if#f[_].l>0 then aM=_;aI=f[aM].l;if#aI==1 then aI[1][2]()end end end}end;aI=#f>0 and aF or aH::E::pcall(function()P()if aI.z then S(j/2-2,"Select boot entry",F,0xffffff)as(aI,j/2+2,6,3,1)else I=j/2-(#f>0 and-1 or 1)as(aF,I-4,8,3,not aI.p and 1,function()if#f>0 then aL=f[aF.s].r;f[aF.s].p(F,I+3)S(I+5,("Storage %s%% / %s / %s"):format(d.floor(aL.spaceUsed()/(aL.spaceTotal()/100)),aL.isReadOnly()and"Read only"or"Read & Write",aL.spaceTotal()<2^20 and"FDD"or aL.spaceTotal()<2^20*12 and"HDD"or"RAID"))for _=aG,#aH do aH[_]=F end;aH[aG]={"Rename",function()P()S(j/2-1,"Rename",F,0xffffff)aJ=a2("Enter new name: ",j/2+1,1,F,0x8cb9c5)if aJ and#aJ>0 and pcall(aL.setLabel,aJ)then aL.setLabel(aJ)aF[aF.s][1]=a0(aL.getLabel()or"N/A",6)end end}if not aL.isReadOnly()then aH[aG+1]={"Format",function()aL.remove("/")aL.setLabel(F)aF[aF.s][1]=a0(aL.getLabel()or"N/A",6)end}end else S(I+3,"No drives available",F,0xffffff)end end)as(aH,I,6,1,aI.p and 1 or F)end end)B,D,D,C=o()D=B=="F"and b.shutdown()if B:match"mp"or m then pcall(T)goto aE end;if B:match"do"and k and l then aI=(C==200 or C==208)and(aI.z and aF or#f>0 and(aI.p and aF or aH))or aI;aI.s=C==203 and(aI.s==1 and#aI or aI.s-1)or C==205 and(aI.s==#aI and 1 or aI.s+1)or aI.s;if C==28 then aI[aI.s][2]()end end;goto E end;b.getBootAddress=function()return r"pro"and r"pro".getData()end;b.setBootAddress=function(aN)return r"pro"and r"pro".setData(aN)end;ar()T()X("Hold ALT to stay in bootloader",F,1,56,aD)for _=1,#f do f[_].b()end;aD()     
-        ]]
+        local file = io.open("/home/box/bios.lua", "r")
+        local data = file:read("*a")
+        file:close()
+        
+        return data
     end,
     set = function(self)
     end,
@@ -617,11 +623,9 @@ local a,b,c,d,e,f,g,h,i,j,k,l,m,n=component,computer,unicode,math,{"/init.lua","
     getDataSize = function(self)
     end,
     getData = function(self)
-        return eepromData
+        return ""
     end,
     setData = function(self, data)
-        checkArg(1, data, "string")
-        eepromData = data
     end,
     getChecksum = function(self)
         return "hv62jd1"
@@ -631,150 +635,21 @@ local a,b,c,d,e,f,g,h,i,j,k,l,m,n=component,computer,unicode,math,{"/init.lua","
     end
 })
 
-local screen = container:addComponent("screen", container:randomComponentUUID(), {
-    isOn = function(self)
-        return true
-    end,
-    turnOn = function(self)
-        return
-    end,
-    turnOff = function(self)
-        return
-    end,
-    getAspectRatio = function(self)
-        return component.screen.getAspectRatio()
-    end,
-    geyKeyboards = function(self)
-        return {
-            container.libcomponent.list("keyboard")(),
-            n = 1
-        }
-    end,
-    setPrecise = function(self)
-        return false
-    end,
-    isPrecise = function(self)
-        return component.screen.isPrecise()
-    end,
-    setTouchModeEnabled = function(self)
-        return false
-    end,
-    isTouchModeInverted = function(self)
-        return component.screen.isTouchModeInverted()
-    end
-})
-
-local function redrawTitleBar()
-    component.gpu.setBackground(0xf0f0f0)
-    component.gpu.fill(1, 1, 160, 1, " ")
-end
-
-local oldPalette, oldWidth, oldHeight = {}
-
-local gpu = container:addComponent("gpu", container:randomComponentUUID(), {
-    bind = function(self, address, reset)
-        return true
-    end,
-    getScreen = function(self)
-        return screen.address
-    end,
-    getBackground = function(self)
-        return component.gpu.getBackground()
-    end,
-    setBackground = function(self, ...)
-        debug_print(debug.traceback())
-        computer.beep(1700, 0.07)
-        require'event'.pull("key_down")
-        return component.gpu.setBackground(...)
-    end,
-    getForeground = function(self, ...)
-        return component.gpu.getForeground(...)
-    end,
-    setForeground = function(self, ...)
-        return component.gpu.setForeground(...)
-    end,
-    getPaletteColor = function(self, ...)
-        return component.gpu.getPaletteColor(...)
-    end,
-    setPaletteColor = function(self, ...)
-        return component.gpu.setPaletteColor(...)
-    end,
-    maxDepth = function(self)
-        return component.gpu.maxDepth()
-    end,
-    getDepth = function(self)
-        return component.gpu.getDepth()
-    end,
-    setDepth = function(self, ...)
-        return false
-    end,
-    maxResolution = function(self)
-        return oldWidth, oldHeight - 1
-    end,
-    getResolution = function(self)
-        local w, h = component.gpu.getResolution()
-        return w, h - 1
-    end,
-    setResolution = function(self, width, height)
-        if height - 1 > oldHeight then
-            error("unsupported resolution")
-        end
-        return component.gpu.setResolution(width, height + 1)
-    end,
-    getViewport = function(self)
-        return oldWidth, oldHeight - 1
-    end,
-    setViewport = function(self, width, height)
-        return false
-    end,
-    get = function(self, x, y)
-        -- local w, h = component.gpu.getResolution()
-        -- if y - 1 > h then
-        --     error("index out of bounds")
-        -- end
-        return component.gpu.get(x, y + 1)
-    end,
-    set = function(self, x, y, symbol, vertical)
-        return component.gpu.set(x, y + 1, symbol, vertical)
-    end,
-    copy = function(self, x, y, w, h, tx, ty)
-        local result = component.gpu.copy(x, y, w, h, tx, ty + 1)
-        -- if result then
-        --     redrawTitleBar()
-        -- end
-        return result
-    end,
-    fill = function(self, x, y, w, h, char)
-        return component.gpu.fill(x, y + 1, w, h, char)
-    end
-})
-
 local function halt(reason)
     component.gpu.setResolution(oldWidth, oldHeight)
-    component.gpu.setBackground(0x000000)
-    component.gpu.setForeground(0xffffff)
+    component.gpu.setBackground(oldBackground)
+    component.gpu.setForeground(oldForeground)
     for i = 1, 15 do
         component.gpu.setPaletteColor(i, oldPalette[i])
     end
     require("tty").clear()
-    print((reason or "unknown reason") .. "\nPress any key to continue")
+    print((reason or "unknown reason"))
 
-    if reason ~= "container shutdown" then
+    if reason ~= "container shutdown" and reason ~= "force shutdown" then
         computer.beep("--")
-    end
-
-    for i = 1, 10 do
-        os.sleep(0) -- collecting garbage
-    end
-
-    while true do
-        if require("event").pull("key_down") then
-            os.exit()
-        end
     end
 end
 
-require("process").info().data.signal = function() end
 require("tty").clear()
 local success, result = container:bootstrap()
 
@@ -787,7 +662,120 @@ for i = 1, 15 do
 end
 oldWidth, oldHeight = component.gpu.getResolution()
 
+require("process").info().data.signal = function() computer.beep() end
 halt(container:loop())
+
+-- local screen = container:addComponent("screen", container:randomComponentUUID(), {
+--     isOn = function(self)
+--         return true
+--     end,
+--     turnOn = function(self)
+--         return
+--     end,
+--     turnOff = function(self)
+--         return
+--     end,
+--     getAspectRatio = function(self)
+--         return component.screen.getAspectRatio()
+--     end,
+--     geyKeyboards = function(self)
+--         return {
+--             container.libcomponent.list("keyboard")(),
+--             n = 1
+--         }
+--     end,
+--     setPrecise = function(self)
+--         return false
+--     end,
+--     isPrecise = function(self)
+--         return component.screen.isPrecise()
+--     end,
+--     setTouchModeEnabled = function(self)
+--         return false
+--     end,
+--     isTouchModeInverted = function(self)
+--         return component.screen.isTouchModeInverted()
+--     end
+-- })
+
+-- local function redrawTitleBar()
+--     component.gpu.setBackground(0xf0f0f0)
+--     component.gpu.fill(1, 1, 160, 1, " ")
+-- end
+
+-- local gpu = container:addComponent("gpu", container:randomComponentUUID(), {
+--     bind = function(self, address, reset)
+--         return true
+--     end,
+--     getScreen = function(self)
+--         return screen.address
+--     end,
+--     getBackground = function(self)
+--         return component.gpu.getBackground()
+--     end,
+--     setBackground = function(self, ...)
+--         return component.gpu.setBackground(...)
+--     end,
+--     getForeground = function(self, ...)
+--         return component.gpu.getForeground(...)
+--     end,
+--     setForeground = function(self, ...)
+--         return component.gpu.setForeground(...)
+--     end,
+--     getPaletteColor = function(self, ...)
+--         return component.gpu.getPaletteColor(...)
+--     end,
+--     setPaletteColor = function(self, ...)
+--         return component.gpu.setPaletteColor(...)
+--     end,
+--     maxDepth = function(self)
+--         return component.gpu.maxDepth()
+--     end,
+--     getDepth = function(self)
+--         return component.gpu.getDepth()
+--     end,
+--     setDepth = function(self, ...)
+--         return false
+--     end,
+--     maxResolution = function(self)
+--         return self.maxWidth - (1*proportion), self.maxHeight - 1
+--     end,
+--     getResolution = function(self)
+--         local w, h = component.gpu.getResolution()
+--         return w - (1*proportion), h - 1
+--     end,
+--     setResolution = function(self, width, height)
+--         print(width, height)
+--         if height > self.maxWidth - 1 then
+--             error("unsupported resolution")
+--         end
+--         return component.gpu.setResolution(width, height)
+--     end,
+--     getViewport = function(self)
+--         return self.maxWidth - (1*proportion), self.maxHeight - 1
+--     end,
+--     setViewport = function(self, width, height)
+--         return false
+--     end,
+--     get = function(self, x, y)
+--         -- local w, h = component.gpu.getResolution()
+--         -- if y - 1 > h then
+--         --     error("index out of bounds")
+--         -- end
+--         return component.gpu.get(x, y + 1)
+--     end,
+--     set = function(self, x, y, symbol, vertical)
+--         return component.gpu.set(x, y + 1, symbol, vertical)
+--     end,
+--     copy = function(self, x, y, w, h, tx, ty)
+--         gpu.copy(x, y - ty + 1, w, h + ty + 1, tx, ty)
+--     end,
+--     fill = function(self, x, y, w, h, char)
+--         return component.gpu.fill(x, y + 1, w, h, char)
+--     end
+-- })
+
+-- gpu.maxWidth, gpu.maxHeight = 
 
 return {
     createContainer = createContainer
