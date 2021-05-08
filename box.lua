@@ -110,7 +110,7 @@ local signals = { -- signal passthrough
         if container.passedComponents[signal[2]] then
             container:readdPassedComponent(signal[2])
             return true
-        elseif signal[2] == pcall(container.libcomponent.invoke, container.libcomponent.list("disk_drive")(), "media") then
+        elseif signal[2] == select(2, pcall(container.libcomponent.invoke, container.libcomponent.list("disk_drive")(), "media")) then
             container:passComponent(signal[2])
             return true
         end
