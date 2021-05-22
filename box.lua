@@ -551,7 +551,6 @@ local function createContainer(address)
                         return component.proxy(address)
                     end
                     local proxy = {address = address, type = container.components[address].type, slot = container.components[address].slot}
-                    debug_print("WTF", address, require("text").serialize(container.components[address], true))
                     for key in pairs(container.components[address].callback) do
                         proxy[key] = setmetatable({address = address, name = key}, componentCallback)
                     end
