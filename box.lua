@@ -280,6 +280,10 @@ local function bootstrap(container)
             local bios, reason = load(code, "=bios", nil, container.temp.sandbox)
 
             if bios then
+                if container.onBootstrap then
+                    container:onBootstrap()
+                end
+
                 container.coroutine = coroutine.create(function()
                     local success, result = xpcall(bios, debug.traceback)
 
@@ -370,9 +374,9 @@ local function passComponent(container, address, weak)
 
         container.passedComponents[address]:attach()
         return container.passedComponents[address]
-    else
-        return false, "component " .. address .. " is not available"
     end
+
+    return false, "component " .. address .. " is not available"
 end
 
 local function pushSignal(container, signal) -- Difference between container.libcomputer.pushSignal and container.pushSignal is that container.pushSignal can pass signal table directlry (without packing/unpacking).
@@ -435,7 +439,7 @@ local function createContainer(address)
                 address = address,
                 type = "computer",
                 slot = -1,
-                callbacks = methodsCallback{
+                callback = methodsCallback{
                     beep = function(...) 
                         return container.libcomputer.beep(...) 
                     end,
@@ -547,14 +551,16 @@ local function createContainer(address)
                         return component.proxy(address)
                     end
                     local proxy = {address = address, type = container.components[address].type, slot = container.components[address].slot}
+                    debug_print("WTF", address, require("text").serialize(container.components[address], true))
                     for key in pairs(container.components[address].callback) do
                         proxy[key] = setmetatable({address = address, name = key}, componentCallback)
                     end
                     container.temp.componentCache[address] = proxy
                     return proxy
-                else
-                    return nil, "no such component"
                 end
+                    
+                error("faskljdsakljdaskl")
+                return nil, "no such component"
             end,
             type = function(address)
                 checkArg(1, address, "string")
