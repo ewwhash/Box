@@ -104,7 +104,7 @@ local signals = { -- signal passthrough
         end
 
         for address in pairs(container.components) do
-            if container.components[address].type == "disk_drive" and container.components[address].pass and signal[2] == component.invoke(address, "media") then
+            if container.components[address].type == "disk_drive" and container.components[address].pass and signal[2] == select(2, pcall(component.invoke, address, "media")) then
                 return container:passComponent(signal[2], true)
             end
         end
@@ -333,7 +333,7 @@ end
 
 local function passComponent(container, address, weak)
     if component.type(address) then
-        if component.type(address) == "disk_drive" and component.invoke(address, "media") then
+        if component.type(address) == "disk_drive" and select(2, pcall(component.invoke, address, "media")) then
             local success, result = container:passComponent(component.invoke(address, "media"), true)
 
             if not success then
