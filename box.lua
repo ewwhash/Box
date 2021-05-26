@@ -19,6 +19,8 @@ local function methodsCallback(methods)
     })
 end
 
+--------------------------------------------------------------------------------
+
 local signals = { -- signal passthrough
     key_down = function(container, signal)
         if container.components[signal[2]] then
@@ -113,6 +115,136 @@ local signals = { -- signal passthrough
     end
 }
 
+local docs = {
+    computer={
+        beep="function([frequency:string or number[, duration:number]]) -- Plays a tone, useful to alert users via audible feedback.",
+        getDeviceInfo="function():table -- Collect information on all connected devices.",
+        getProgramLocations="function():table -- Returns a map of program name to disk label for known programs.",
+        isRunning="function():boolean -- Returns whether the computer is running.",
+        start="function():boolean -- Starts the computer. Returns true if the state changed.",
+        stop="function():boolean -- Stops the computer. Returns true if the state changed."},
+    eeprom={
+        get="function():string -- Get the currently stored byte array.",
+        getChecksum="function():string -- Get the checksum of the data on this EEPROM.",
+        getData="function():string -- Get the currently stored byte array.",
+        getDataSize="function():number -- Get the storage capacity of this EEPROM.",
+        getLabel="function():string -- Get the label of the EEPROM.",
+        getSize="function():number -- Get the storage capacity of this EEPROM.",
+        makeReadonly="function(checksum:string):boolean -- Make this EEPROM readonly if it isn't already. This process cannot be reversed!",
+        set="function(data:string) -- Overwrite the currently stored byte array.",
+        setData="function(data:string) -- Overwrite the currently stored byte array.",
+        setLabel="function(data:string):string -- Set the label of the EEPROM."},
+    filesystem={close="function(handle:userdata) -- Closes an open file descriptor with the specified handle.",
+        exists="function(path:string):boolean -- Returns whether an object exists at the specified absolute path in the file system.",
+        getLabel="function():string -- Get the current label of the drive.",
+        isDirectory="function(path:string):boolean -- Returns whether the object at the specified absolute path in the file system is a directory.",
+        isReadOnly="function():boolean -- Returns whether the file system is read-only.",
+        lastModified="function(path:string):number -- Returns the (real world) timestamp of when the object at the specified absolute path in the file system was modified.",
+        list="function(path:string):table -- Returns a list of names of objects in the directory at the specified absolute path in the file system.",
+        makeDirectory="function(path:string):boolean -- Creates a directory at the specified absolute path in the file system. Creates parent directories, if necessary.",
+        open="function(path:string[, mode:string='r']):userdata -- Opens a new file descriptor and returns its handle.",
+        read="function(handle:userdata, count:number):string or nil -- Reads up to the specified amount of data from an open file descriptor with the specified handle. Returns nil when EOF is reached.",
+        remove="function(path:string):boolean -- Removes the object at the specified absolute path in the file system.",
+        rename="function(from:string, to:string):boolean -- Renames/moves an object from the first specified absolute path in the file system to the second.",
+        seek="function(handle:userdata, whence:string, offset:number):number -- Seeks in an open file descriptor with the specified handle. Returns the new pointer position.",
+        setLabel="function(value:string):string -- Sets the label of the drive. Returns the new value, which may be truncated.",
+        size="function(path:string):number -- Returns the size of the object at the specified absolute path in the file system.",
+        spaceTotal="function():number -- The overall capacity of the file system, in bytes.",
+        spaceUsed="function():number -- The currently used capacity of the file system, in bytes.",
+        write="function(handle:userdata, value:string):boolean -- Writes the specified data to an open file descriptor with the specified handle."},
+    gpu={
+        bind="function(address:string[, reset:boolean=true]):boolean -- Binds the GPU to the screen with the specified address and resets screen settings if `reset` is true.",
+        copy="function(x:number, y:number, width:number, height:number, tx:number, ty:number):boolean -- Copies a portion of the screen from the specified location with the specified size by the specified translation.",
+        fill="function(x:number, y:number, width:number, height:number, char:string):boolean -- Fills a portion of the screen at the specified position with the specified size with the specified character.",
+        get="function(x:number, y:number):string, number, number, number or nil, number or nil -- Get the value displayed on the screen at the specified index, as well as the foreground and background color. If the foreground or background is from the palette, returns the palette indices as fourth and fifth results, else nil, respectively.",
+        getBackground="function():number, boolean -- Get the current background color and whether it's from the palette or not.",
+        getDepth="function():number -- Returns the currently set color depth.",
+        getForeground="function():number, boolean -- Get the current foreground color and whether it's from the palette or not.",
+        getPaletteColor="function(index:number):number -- Get the palette color at the specified palette index.",
+        getResolution="function():number, number -- Get the current screen resolution.",
+        getScreen="function():string -- Get the address of the screen the GPU is currently bound to.",
+        getViewport="function():number, number -- Get the current viewport resolution.",
+        maxDepth="function():number -- Get the maximum supported color depth.",
+        maxResolution="function():number, number -- Get the maximum screen resolution.",
+        set="function(x:number, y:number, value:string[, vertical:boolean]):boolean -- Plots a string value to the screen at the specified position. Optionally writes the string vertically.",
+        setBackground="function(value:number[, palette:boolean]):number, number or nil -- Sets the background color to the specified value. Optionally takes an explicit palette index. Returns the old value and if it was from the palette its palette index.",
+        setDepth="function(depth:number):number -- Set the color depth. Returns the previous value.",
+        setForeground="function(value:number[, palette:boolean]):number, number or nil -- Sets the foreground color to the specified value. Optionally takes an explicit palette index. Returns the old value and if it was from the palette its palette index.",
+        setPaletteColor="function(index:number, color:number):number -- Set the palette color at the specified palette index. Returns the previous value.",
+        setResolution="function(width:number, height:number):boolean -- Set the screen resolution. Returns true if the resolution changed.",
+        setViewport="function(width:number, height:number):boolean -- Set the viewport resolution. Cannot exceed the screen resolution. Returns true if the resolution changed."},
+    internet={
+        connect="function(address:string[, port:number]):userdata -- Opens a new TCP connection. Returns the handle of the connection.",
+        isHttpEnabled="function():boolean -- Returns whether HTTP requests can be made (config setting).",
+        isTcpEnabled="function():boolean -- Returns whether TCP connections can be made (config setting).",
+        request="function(url:string[, postData:string[, headers:table[, method:string]]]):userdata -- Starts an HTTP request. If this returns true, further results will be pushed using `http_response` signals."},
+    screen={
+        getAspectRatio="function():number, number -- The aspect ratio of the screen. For multi-block screens this is the number of blocks, horizontal and vertical.",
+        getKeyboards="function():table -- The list of keyboards attached to the screen.",
+        isOn="function():boolean -- Returns whether the screen is currently on.",
+        isPrecise="function():boolean -- Returns whether the screen is in high precision mode (sub-pixel mouse event positions).",
+        isTouchModeInverted="function():boolean -- Whether touch mode is inverted (sneak-activate opens GUI, instead of normal activate).",
+        setPrecise="function(enabled:boolean):boolean -- Set whether to use high precision mode (sub-pixel mouse event positions).",
+        setTouchModeInverted="function(value:boolean):boolean -- Sets whether to invert touch mode (sneak-activate opens GUI, instead of normal activate).",
+        turnOff="function():boolean -- Turns off the screen. Returns true if it was on.",
+        turnOn="function():boolean -- Turns the screen on. Returns true if it was off."
+    }
+}
+
+local deviceInfo = {
+    computer = {
+        capacity="-1",
+        class="system",
+        description="Computer",
+        product="Blocker",
+        vendor="Box™"
+    },
+    internet = {
+        description = "Internet modem",
+        product = "Generic internet modem",
+        vendor = "Box™"
+    },
+    filesystem = {
+        capacity = "-1",
+        class = "volume",
+        clock = "0/0/0/0/0/0",
+        description = "Filesystem",
+        product = "Generic filesystem",
+        vendor = "Box™"
+    },
+    keyboard = {
+        description = "Keyboard",
+        product = "Generic keyboard",
+        vendor = "Box™"
+    },
+    screen = {
+        class="display",
+        description="Text buffer",
+        product="Generic screen",
+        vendor="Box™",
+        width="-1"
+    },
+    gpu = {
+        capacity="-1",
+        class="display",
+        clock="0/0/0/0/0/0",
+        description="Graphics controller",
+        product="MPG2000 GTZ",
+        vendor="Box™",
+        width="-1"
+    },
+    eeprom = {
+        capacity = "-1",
+        class = "memory",
+        description = "EEPROM",
+        product = "FlashStick2k",
+        size = "-1",
+        vendor = "Box™"
+    }
+}
+
+--------------------------------------------------------------------------------
+
 local function uuid()
     local template ="xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
     local random = math.random
@@ -123,19 +255,28 @@ local function uuid()
     return uuid
 end
 
-local function componentUUID(container)
-    local UUID
-    repeat
-        UUID = uuid()
-    until not (container.components[UUID] or UUID == container.address)
-    return UUID
+local function createComponent(component)
+    local component = component
+    component.doc = component.doc or docs[component.type] or {}
+    component.deviceInfo = component.deviceInfo or deviceInfo[component.type] or {
+        description = "Generic Box™ component",
+        product = "Generic " .. unicode.upper(component.type),
+        class = "Generic",
+        vendor = "Box™",
+        clock = "0/0/0/0/0/0",
+        width = math.huge,
+        size = math.huge,
+    }
+    component.callback = methodsCallback(component.callback)
+
+    return component
 end
 
 local function resume(container)
-    if container.coroutine then
+    if container.temp.coroutine then
         local signal = container.temp.signalQueue[1] or {}
         table.remove(container.temp.signalQueue, 1)
-        local success, result, error = coroutine.resume(container.coroutine, table.unpack(signal))
+        local success, result, error = coroutine.resume(container.temp.coroutine, table.unpack(signal))
         
         if success then -- coroutine resume successfull
             if result == false and error then -- error from container
@@ -147,7 +288,7 @@ local function resume(container)
             if result == true then
                 return container:bootstrap()
             end
-            if coroutine.status(container.coroutine) == "dead" then
+            if coroutine.status(container.temp.coroutine) == "dead" then
                 return false, "container halted"
             end
             return true, result or math.huge
@@ -160,8 +301,6 @@ local function resume(container)
 end
 
 local function loop(container)
-    container.temp.startUptime = computer.uptime()
-
     while true do
         local success, result = container:resume()
 
@@ -218,8 +357,37 @@ local function bootstrap(container)
         utf8 = utf8,
         checkArg = checkArg,
         unicode = unicode,
-        component = container.libcomponent,
-        computer = container.libcomputer,
+        component = {
+            doc = container.libcomponent.doc,
+            invoke = container.libcomponent.invoke,
+            list = container.libcomponent.list,
+            methods = container.libcomponent.methods,
+            proxy = container.libcomponent.proxy,
+            type = container.libcomponent.type,
+            slot = container.libcomponent.slot,
+            fields = container.libcomponent.fields
+        },
+        computer = {
+            address = container.libcomputer.address,
+            tmpAddress = function() return container.libcomputer.tmpAddress() end,
+            freeMemory = container.libcomputer.freeMemory,
+            totalMemory = container.libcomputer.totalMemory,
+            energy = container.libcomputer.energy,
+            maxEnergy = container.libcomputer.maxEnergy,
+            uptime = container.libcomputer.uptime,
+            shutdown = container.libcomputer.shutdown,
+            users = container.libcomputer.users,
+            addUser = container.libcomputer.addUser,
+            removeUser = container.libcomputer.removeUser,
+            pushSignal = container.libcomputer.pushSignal,
+            pullSignal = container.libcomputer.pullSignal,
+            beep = container.libcomputer.beep,
+            getDeviceInfo = container.libcomputer.getDeviceInfo,
+            setArchitecture = container.libcomputer.setArchitecture,
+            getArchitecture = container.libcomputer.getArchitecture,
+            getArchitectures = container.libcomputer.getArchitectures,
+            getProgramLocations = container.libcomputer.getProgramLocations
+        },
         coroutine = {
             create = coroutine.create,
             resume = function(co, ...) -- custom resume part for bubbling sysyields
@@ -272,6 +440,10 @@ local function bootstrap(container)
     }
     container.temp.sandbox._G = container.temp.sandbox
 
+    if container.beforeBootstrap then
+        container:beforeBootstrap()
+    end
+
     local eeprom = container.libcomponent.list("eeprom")()
 
     if eeprom then
@@ -284,7 +456,8 @@ local function bootstrap(container)
                     container:onBootstrap()
                 end
 
-                container.coroutine = coroutine.create(function()
+                container.temp.coroutine = coroutine.create(function()
+                    container.temp.startUptime = computer.uptime()
                     local success, result = xpcall(bios, debug.traceback)
 
                     if success then -- container halted
@@ -304,31 +477,39 @@ local function bootstrap(container)
     return false, "no bios found; install a configured EEPROM"
 end
 
-local function addComponent(container, type, uuid, callbacks, docs, deviceInfo)
-    container.components[uuid] = {
-        address = uuid, 
-        type = type, 
-        slot = -1, 
-        callback = methodsCallback(callbacks),
-        docs = docs or {},
-        deviceInfo = deviceInfo or {
-            description = "Generic Box™ component",
-            product = "Generic " .. unicode.upper(type),
-            class = "Generic",
-            vendor = "Box™",
-            clock = "0/0/0/0/0/0",
-            width = math.huge,
-            size = math.huge,
-        },
-        remove = function()
-            container.computer.pushSignal{"component_removed", uuid, type}
-            container.components[uuid] = nil
-            return true
-        end
-    }
+local function removeComponent(component)
+    component.container:pushSignal{"component_removed", uuid, component.type}
+    if component.container.passedComponents[component.address] then
+        component.container.passedComponents[component.address] = nil
+    end
+    component.container.components[component.address] = nil
+end
 
-    container:pushSignal{"component_added", uuid, type}
-    return container.components[uuid]
+local function attachComponent(container, component)
+    container:pushSignal{"component_added", uuid, component.type}
+    if container.components[component.address] then
+        error("component " .. component.address .. " is already attached")
+    end
+
+    container.components[component.address] = component
+    container.components[component.address].container = container
+    container.components[component.address].remove = removeComponent
+
+    return component
+end
+
+local function detachPassedComponent(component)
+    component.container:pushSignal{"component_removed", component.address, component.type}
+    component.container.components[component.address] = nil
+    if component.container.passedComponents[component.address].weak then
+        component.container.passedComponents[component.address] = nil
+    end
+end
+
+local function attachPassedComponent(component)
+    component.container:pushSignal{"component_added", component.address, component.container.passedComponents[component.address].type}
+    component.container.components[component.address] = component.container.passedComponents[component.address]
+    return true
 end
 
 local function passComponent(container, address, weak)
@@ -342,45 +523,31 @@ local function passComponent(container, address, weak)
         end
 
         if container.components[address] then
-            return false, "component " .. address .. " collision detected"
+            error("component " .. address .. " collision detected")
         end
 
         container.passedComponents[address] = {
             address = address,
             type = component.type(address),
-            slot = component.slot(address),
-            fields = component.fields(address),
-            detach = function()
-                container.computer:pushSignal{"component_removed", address, container.components[address].type}
-                container.components[address] = nil
-                if weak then
-                    container.passedComponents[address] = nil
-                end
-                return true
-            end,
-            attach = function()
-                container.components[address] = container.passedComponents[address]
-                container:pushSignal{"component_added", address, container.passedComponents[address].type}
-                return true
-            end,
-            remove = function()
-                container.passedComponents[address]:detach()
-                container.passedComponents[address] = nil
-                return true
-            end,
+            detach = detachPassedComponent,
+            attach = attachPassedComponent,
+            remove = removeComponent,
             pass = true,
-            weak = weak
+            weak = weak,
+            container = container
         }
 
         container.passedComponents[address]:attach()
         return container.passedComponents[address]
     end
 
-    return false, "component " .. address .. " is not available"
+    error("component " .. address .. " is not available")
 end
 
-local function pushSignal(container, signal) -- Difference between container.libcomputer.pushSignal and container.pushSignal is that container.pushSignal can pass signal table directlry (without packing/unpacking).
+local function pushSignal(container, signal) -- Difference between container.libcomputer.pushSignal and container.pushSignal is that container.pushSignal can pass signal table directly (without packing/unpacking) and coroutine checking (signal won't be passed if container wasn't started)
     if #container.temp.signalQueue >= 256 then
+        return false
+    elseif container.temp.startUptime == 0 then
         return false
     end
 
@@ -419,10 +586,9 @@ local function createContainer(address)
         pushSignal = pushSignal,
         passSignal = passSignal,
 
-        addComponent = addComponent,
+        attachComponent = attachComponent,
         passComponent = passComponent,
         passedComponents = {},
-        uuid = componentUUID,
 
         temp = {
             clear = function()
@@ -435,11 +601,13 @@ local function createContainer(address)
         },
 
         components = {
-            [address] = {
+            [address] = createComponent{
                 address = address,
-                type = "computer",
-                slot = -1,
-                callback = methodsCallback{
+                type = "computer", 
+                callback = {
+                    getDeviceInfo = function(...)
+                        return container.libcomputer.getDeviceInfo(...)
+                    end,
                     beep = function(...) 
                         return container.libcomputer.beep(...) 
                     end,
@@ -450,7 +618,7 @@ local function createContainer(address)
                         if container.temp.coroutine and coroutine.status(container.temp.coroutine) == "running" then
                             return true
                         end
-
+            
                         return false
                     end,
                     start = function() 
@@ -460,21 +628,8 @@ local function createContainer(address)
                         container.libcomputer.shutdown() 
                     end
                 },
-                docs = {
-                    beep = "function([frequency:string or number[, duration:number]]) -- Plays a tone, useful to alert users via audible feedback.",
-                    getDeviceInfo = "function():table -- Collect information on all connected devices.",
-                    getProgramLocations = "function():table -- Returns a map of program name to disk label for known programs.",
-                    start = "function():boolean -- Starts the computer. Returns true if the state changed.",
-                    stop = "function():boolean -- Stops the computer. Returns true if the state changed.",
-                    isRunning = "function():boolean -- Returns whether the computer is running."
-                },
-                deviceInfo = {
-                    capacity = -1,
-                    class = "system",
-                    description = "Computer",
-                    product = "Blocker",
-                    vendor = "Box™"
-                }
+                container = container,
+                removeComponent = removeComponent
             }
         },
 
@@ -493,7 +648,7 @@ local function createContainer(address)
             methods = function(address)
                 checkArg(1, address, "string")
                 if container.components[address] then
-                    if container.component[address].pass then
+                    if container.components[address].pass then
                         return component.methods(address)
                     end
                     local methods = {}
@@ -550,15 +705,13 @@ local function createContainer(address)
                     if container.components[address].pass then
                         return component.proxy(address)
                     end
-                    local proxy = {address = address, type = container.components[address].type, slot = container.components[address].slot}
+                    local proxy = {address = address, type = container.components[address].type, slot = container.components[address].slot or -1}
                     for key in pairs(container.components[address].callback) do
                         proxy[key] = setmetatable({address = address, name = key}, componentCallback)
                     end
                     container.temp.componentCache[address] = proxy
                     return proxy
                 end
-                    
-                error("faskljdsakljdaskl")
                 return nil, "no such component"
             end,
             type = function(address)
@@ -591,10 +744,8 @@ local function createContainer(address)
                 local deviceInfo = {}
         
                 for k, v in pairs(realDeviceInfo) do
-                    if v.class == "processor" then
-                        deviceInfo[container.component:uuid()] = v
-                    elseif v.class == "memory" then
-                        deviceInfo[container.component:uuid()] = v
+                    if v.class == "processor" or v.class == "memory" then
+                        deviceInfo[k] = v
                     elseif container.passedComponents[k] then
                         deviceInfo[k] = v
                     end
@@ -608,7 +759,9 @@ local function createContainer(address)
         
                 return deviceInfo
             end,
-            tmpAddress = computer.tmpAddress,
+            tmpAddress = function()
+                error("not implemented")
+            end,
             freeMemory = computer.freeMemory,
             totalMemory = computer.totalMemory,
             uptime = function()
@@ -639,7 +792,23 @@ local function createContainer(address)
     container.temp.clear()
     return container
 end
+    
+--------------------------------------------------------------------------------
+
+-- local container = createContainer()
+-- container.libcomputer.tmpAddress = function()
+--     return computer.tmpAddress()
+-- end
+
+-- for address, type in pairs(component.list()) do
+--     container:passComponent(address)
+-- end
+
+-- print(container:bootstrap())
+-- print(container:loop())
 
 return {
-    createContainer = createContainer
+    createContainer = createContainer,
+    createComponent = createComponent,
+    uuid = uuid
 }
