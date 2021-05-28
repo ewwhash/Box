@@ -523,7 +523,7 @@ local function passComponent(container, address, weak)
         end
 
         if container.components[address] then
-            error("component " .. address .. " collision detected")
+            return false, "component " .. address .. " collision detected"
         end
 
         container.passedComponents[address] = {
