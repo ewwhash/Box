@@ -515,10 +515,14 @@ end
 local function passComponent(container, address, weak)
     if component.type(address) then
         if component.type(address) == "disk_drive" and select(2, pcall(component.invoke, address, "media")) then
-            local success, result = container:passComponent(component.invoke(address, "media"), true)
+            local result, address = pcall(component.invoke, address, "media") -- fuck this, server disk drive does not have 'media' method
 
-            if not success then
-                return success, result
+            if result then
+                local success, result = container:passComponent(address, true)
+
+                if not success then
+                    return success, result
+                end
             end
         end
 
