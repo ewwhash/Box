@@ -514,7 +514,7 @@ end
 
 local function passComponent(container, address, weak)
     if component.type(address) then
-        if component.type(address) == "disk_drive" and select(2, pcall(component.invoke, address, "media")) then
+        if component.type(address) == "disk_drive" then
             local result, address = pcall(component.invoke, address, "media") -- fuck this, server disk drive does not have 'media' method
 
             if result then
