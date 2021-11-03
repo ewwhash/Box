@@ -257,7 +257,7 @@ end
 
 local function createComponent(component)
     local component = component
-    component.doc = component.doc or docs[component.type] or {}
+    component.docs = component.docs or docs[component.type] or {}
     component.deviceInfo = component.deviceInfo or deviceInfo[component.type] or {
         description = "Generic Box™ component",
         product = "Generic " .. unicode.upper(component.type),
